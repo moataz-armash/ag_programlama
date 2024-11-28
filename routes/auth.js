@@ -45,7 +45,12 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
-    res.status(200).json({ message: "Login successful, username has been saved in local storage successfully: ",username: user.username });
+    res.status(200).json({
+      message:
+        "Login successful, username has been saved in local storage successfully: ",
+      username: user.username,
+      userId: user._id
+    });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }
