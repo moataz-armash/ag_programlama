@@ -4,7 +4,7 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 const connectDB = require("./config/db");
 const authRoutes = require("./routes/auth");
-
+const userCRUDs = require("./routes/userCRUD");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -17,7 +17,7 @@ app.use(bodyParser.json());
 
 // Routes
 app.use("/api", authRoutes);
-
+app.use("/api", userCRUDs);
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
