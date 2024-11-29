@@ -8,7 +8,6 @@ router.post("/start", async (req, res) => {
   const { userId, otherUserId } = req.body;
 
   try {
-    // Check if a chat already exists
     let chat = await Chat.findOne({
       participants: { $all: [userId, otherUserId] },
     });
@@ -47,7 +46,11 @@ router.post("/message", async (req, res) => {
         .json({ error: "Sender is not a participant of this chat." });
     }
 
-    const message = { sender: senderId, content };
+    const message = {
+      sender: senderId,
+      content,
+      timestamp: new Date().toISOString(),
+    };
     chat.messages.push(message);
     await chat.save();
 
@@ -63,15 +66,19 @@ router.get("/:chatId/messages", async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
 
   try {
-    const chat = await Chat.findById(chatId)
-      .populate({ path: "messages.sender", select: "username email" })
-      .slice("messages", [(page - 1) * limit, limit]);
+    const chat = await Chat.findById(chatId).populate({
+      path: "messages.sender",
+      select: "username email",
+    });
 
     if (!chat) {
       return res.status(404).json({ error: "Chat not found" });
     }
 
-    res.status(200).json(chat.messages);
+    const startIndex = (page - 1) * limit;
+    const messages = chat.messages.slice(startIndex, startIndex + limit);
+
+    res.status(200).json(messages);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

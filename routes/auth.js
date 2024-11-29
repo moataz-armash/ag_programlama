@@ -72,7 +72,7 @@ router.post("/usernames/check", async (req, res) => {
   try {
     const user = await User.findOne({ username });
     if (user) {
-      res.status(200).json({ exists: true });
+      res.status(200).json({ exists: true, userId: user._id });
     } else {
       res.status(404).json({ exists: false });
     }
