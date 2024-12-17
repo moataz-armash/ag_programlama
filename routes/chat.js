@@ -46,47 +46,60 @@ router.post("/start", async (req, res) => {
     const user1 = await User.findById(userId);
     const user2 = await User.findById(otherUserId);
 
-    console.log("user1: " + user1 + " " + user2);
+    console.log("Users fetched:", {
+      user1: user1?.username || "Not Found",
+      user2: user2?.username || "Not Found",
+    });
 
     if (!user1 || !user2) {
       return res.status(404).json({ error: "One or both users not found." });
     }
 
-    // Find an existing chat between the users
-    let chat = await Chat.findOne({
-      participants: { $all: [userId, otherUserId] },
-    });
+    // Find or create the chat
+    let chat = await Chat.findOneAndUpdate(
+      { participants: { $all: [userId, otherUserId] } },
+      {},
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
 
-    if (!chat) {
-      // Create a new chat if it doesn't exist
-      chat = new Chat({ participants: [userId, otherUserId] });
-      await chat.save();
-
-      // Update user chats
+    // If a new chat was created, add to users' chat lists
+    if (!chat.__v) {
+      // Newly created document has no `__v`
+      console.log("Creating a new chat...");
       await User.findByIdAndUpdate(userId, { $push: { chats: chat._id } });
       await User.findByIdAndUpdate(otherUserId, { $push: { chats: chat._id } });
+    } else {
+      console.log("Existing chat retrieved.");
     }
 
-    // Populate messages and decrypt if necessary
+    // Populate messages
     const populatedChat = await Chat.findById(chat._id).populate({
       path: "messages.sender",
       select: "username email",
     });
 
-    const decryptedMessages = populatedChat.messages.map((message) => ({
-      ...message.toObject(),
-      content: decrypt(message.content), // Decrypt message content
-    }));
+    // Decrypt messages safely
+    const decryptedMessages = populatedChat.messages.map((message) => {
+      try {
+        return {
+          ...message.toObject(),
+          content: decrypt(message.content), // Decrypt content
+        };
+      } catch (err) {
+        console.error("Error decrypting message:", message._id, err.message);
+        return message; // Return message without decryption if error occurs
+      }
+    });
 
     res.status(200).json({
       ...populatedChat.toObject(),
       messages: decryptedMessages,
     });
   } catch (error) {
-    console.log("fromc cath");
     console.error("Error in /start endpoint:", error.message, error.stack);
     res.status(500).json({
-      error: "An error occurred while starting or retrieving the chat.",
+      error:
+        "An unexpected error occurred while starting or retrieving the chat.",
     });
   }
 });
@@ -139,51 +152,63 @@ router.post("/message", async (req, res) => {
 // Get messages for a specific chat with pagination
 router.get("/:chatId/messages", async (req, res) => {
   const { chatId } = req.params;
-  const { page = 1, limit = 20 } = req.query; // Default to page 1 and 20 messages per page
+  let { page = 1, limit = 20 } = req.query;
 
   try {
-    // Find the chat by ID and populate sender details
-    const chat = await Chat.findById(chatId).populate({
-      path: "messages.sender",
-      select: "username email",
-    });
+    // Validate page and limit
+    page = parseInt(page) > 0 ? parseInt(page) : 1;
+    limit = parseInt(limit) > 0 ? parseInt(limit) : 20;
 
-    // Handle chat not found
+    // Find the chat and slice messages for pagination
+    const chat = await Chat.findById(chatId)
+      .populate({
+        path: "messages.sender",
+        select: "username email",
+      })
+      .select({
+        messages: { $slice: [(page - 1) * limit, limit] }, // MongoDB slice for pagination
+      });
+
     if (!chat) {
       return res.status(404).json({ error: "Chat not found" });
     }
 
-    // Calculate pagination indices
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + parseInt(limit);
+    // Decrypt messages
+    const paginatedMessages = chat.messages.map((message) => {
+      try {
+        return {
+          ...message.toObject(),
+          content: decrypt(message.content), // Decrypt content
+        };
+      } catch (err) {
+        console.error("Error decrypting message:", message._id, err.message);
+        return message; // Return undecrypted message if error occurs
+      }
+    });
 
-    // Paginate and decrypt messages
-    const paginatedMessages = chat.messages
-      .slice(startIndex, endIndex)
-      .map((message) => ({
-        ...message.toObject(),
-        content: decrypt(message.content), // Decrypt the message content
-      }));
+    // Calculate total message count (separate query to keep pagination efficient)
+    const totalMessages = await Chat.aggregate([
+      { $match: { _id: chat._id } },
+      { $project: { messageCount: { $size: "$messages" } } },
+    ]);
 
-    // Calculate metadata for pagination
-    const totalMessages = chat.messages.length;
-    const hasMore = endIndex < totalMessages;
+    const total = totalMessages[0]?.messageCount || 0;
+    const hasMore = page * limit < total;
 
-    // Return the paginated messages along with metadata
+    // Send response
     res.status(200).json({
       messages: paginatedMessages,
-      page: parseInt(page),
-      limit: parseInt(limit),
-      totalMessages,
+      page,
+      limit,
+      totalMessages: total,
       hasMore,
     });
   } catch (error) {
     console.error("Error in /:chatId/messages endpoint:", error.message);
-    res
-      .status(500)
-      .json({ error: "An error occurred while retrieving messages." });
+    res.status(500).json({ error: "An error occurred while retrieving messages." });
   }
 });
+
 
 // Get a user's chats (lightweight)
 router.get("/user/:userId/chats", async (req, res) => {

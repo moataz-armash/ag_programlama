@@ -10,6 +10,9 @@ const chatRoutes = require("./routes/chat");
 const path = require("path");
 const crypto = require("crypto");
 
+const ENCRYPTION_KEY = Buffer.from(process.env.ENCRYPTION_KEY, "hex"); 
+const IV_LENGTH = 16; // Initialization vector length
+
 // Function to encrypt a message
 function encrypt(text) {
   const iv = crypto.randomBytes(IV_LENGTH); // Generate a random IV
