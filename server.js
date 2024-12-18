@@ -7,6 +7,20 @@ const connectDB = require("./config/db");
 const authRoutes = require("./routes/auth");
 const userCRUDs = require("./routes/userCRUD");
 const chatRoutes = require("./routes/chat");
+const path = require("path");
+const crypto = require("crypto");
+
+const ENCRYPTION_KEY = Buffer.from(process.env.ENCRYPTION_KEY, "hex"); 
+const IV_LENGTH = 16; // Initialization vector length
+
+// Function to encrypt a message
+function encrypt(text) {
+  const iv = crypto.randomBytes(IV_LENGTH); // Generate a random IV
+  const cipher = crypto.createCipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
+  let encrypted = cipher.update(text, "utf8", "hex");
+  encrypted += cipher.final("hex");
+  return `${iv.toString("hex")}:${encrypted}`; // Combine IV and ciphertext
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -25,7 +39,8 @@ connectDB();
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
-
+// Serve static files from the "uploads" folder
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // WebSocket logic
 io.on("connection", (socket) => {
   console.log("A user connected");
@@ -39,7 +54,15 @@ io.on("connection", (socket) => {
   // Handle sending messages
   socket.on("sendMessage", (data) => {
     const { chatId, senderId, content } = data;
-    io.to(chatId).emit("receiveMessage", { senderId, content });
+
+    // Encrypt the message before broadcasting
+    const encryptedContent = encrypt(content);
+
+    // Broadcast the encrypted message
+    io.to(chatId).emit("receiveMessage", {
+      senderId,
+      content: encryptedContent,
+    });
   });
 
   // Handle user disconnection

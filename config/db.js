@@ -1,6 +1,9 @@
 // config/db.js
 const mongoose = require("mongoose");
+const crypto = require("crypto");
 require("dotenv").config();
+// const ENCRYPTION_KEY = crypto.randomBytes(32).toString("hex"); // 32 bytes as Hex
+// console.log("Generated ENCRYPTION_KEY:", ENCRYPTION_KEY);
 
 const connectDB = async () => {
   try {
