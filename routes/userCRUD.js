@@ -14,7 +14,7 @@ router.get("/user/:userId/contacts", async (req, res) => {
       path: "chats",
       populate: {
         path: "participants",
-        select: "username email", // Fetch only username and email
+        select: "username email image", // Fetch only username and email
       },
     });
 
@@ -107,7 +107,6 @@ router.delete("/user/delete-contact", async (req, res) => {
     res.status(500).json({ error: "Failed to delete contact." });
   }
 });
-
 
 router.delete("/delete/:user", async (req, res) => {
   const id = req.params.user;

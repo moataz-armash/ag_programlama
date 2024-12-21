@@ -205,10 +205,11 @@ router.get("/:chatId/messages", async (req, res) => {
     });
   } catch (error) {
     console.error("Error in /:chatId/messages endpoint:", error.message);
-    res.status(500).json({ error: "An error occurred while retrieving messages." });
+    res
+      .status(500)
+      .json({ error: "An error occurred while retrieving messages." });
   }
 });
-
 
 // Get a user's chats (lightweight)
 router.get("/user/:userId/chats", async (req, res) => {

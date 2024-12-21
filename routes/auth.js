@@ -88,7 +88,7 @@ router.post("/login", async (req, res) => {
 // Get all usernames route
 router.get("/usernames", async (req, res) => {
   try {
-    const users = await User.find({}, "username"); // Only select the username field
+    const users = await User.find({}, "username image"); // Only select the username field
     res.status(200).json(users);
   } catch (error) {
     res.status(500).json({ message: "Server error" });
