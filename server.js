@@ -7,6 +7,7 @@ const connectDB = require("./config/db");
 const authRoutes = require("./routes/auth");
 const userCRUDs = require("./routes/userCRUD");
 const chatRoutes = require("./routes/chat");
+const messageRoutes = require("./routes/message");
 const path = require("path");
 const crypto = require("crypto");
 
@@ -75,6 +76,7 @@ io.on("connection", (socket) => {
 app.use("/api", authRoutes);
 app.use("/api", userCRUDs);
 app.use("/api", chatRoutes); // Mount chat routes under '/api/chats'
+app.use("/api", messageRoutes); // Mount message routes under '/api/messages'
 
 // Start the server
 server.listen(PORT, () => {
