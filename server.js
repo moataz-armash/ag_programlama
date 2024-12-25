@@ -1,82 +1,70 @@
 const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-const bodyParser = require("body-parser");
-const cors = require("cors");
+const dotenv = require("dotenv");
+const { chats } = require("./data/data");
 const connectDB = require("./config/db");
-const authRoutes = require("./routes/auth");
-const userCRUDs = require("./routes/userCRUD");
-const chatRoutes = require("./routes/chat");
-const path = require("path");
-const crypto = require("crypto");
+const colors = require("colors");
+const userRoutes = require("./routes/userRoutes");
+const chatRoutes = require("./routes/chatRoutes");
+const messageRoutes = require("./routes/messageRoutes");
+const { errorHandler, notFound } = require("./middleware/errorMiddleware");
 
-const ENCRYPTION_KEY = Buffer.from(process.env.ENCRYPTION_KEY, "hex"); 
-const IV_LENGTH = 16; // Initialization vector length
-
-// Function to encrypt a message
-function encrypt(text) {
-  const iv = crypto.randomBytes(IV_LENGTH); // Generate a random IV
-  const cipher = crypto.createCipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
-  let encrypted = cipher.update(text, "utf8", "hex");
-  encrypted += cipher.final("hex");
-  return `${iv.toString("hex")}:${encrypted}`; // Combine IV and ciphertext
-}
-
+dotenv.config();
+connectDB();
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: "*", // Adjust as per your frontend origin
-    methods: ["GET", "POST"],
-  },
-});
+
+app.use(express.json());
+
+app.use("/api/user", userRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/message", messageRoutes);
+
+app.use(notFound);
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-// Connect to the database
-connectDB();
+const server = app.listen(
+  PORT,
+  console.log(`Server is running on PORT ${PORT}...`.yellow.bold)
+);
 
-// Middleware
-app.use(cors());
-app.use(bodyParser.json());
-// Serve static files from the "uploads" folder
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-// WebSocket logic
+const io = require("socket.io")(server, {
+  pingTimeout: 60000,
+  cors: {
+    origin: "http://localhost:3000",
+  },
+});
+
 io.on("connection", (socket) => {
-  console.log("A user connected");
+  console.log("connected to socket.io");
 
-  // Handle joining a chat room
-  socket.on("joinChat", (chatId) => {
-    socket.join(chatId);
-    console.log(`User joined chat: ${chatId}`);
+  socket.on("setup", (userData) => {
+    socket.join(userData._id);
+    socket.emit("connected");
   });
 
-  // Handle sending messages
-  socket.on("sendMessage", (data) => {
-    const { chatId, senderId, content } = data;
+  socket.on("join chat", (room) => {
+    socket.join(room);
+    console.log("user joined room: " + room);
+  });
 
-    // Encrypt the message before broadcasting
-    const encryptedContent = encrypt(content);
+  socket.on("typing", (room) => socket.in(room).emit("typing"));
+  socket.on("stop typing", (room) => socket.in(room).emit("stop typing"));
 
-    // Broadcast the encrypted message
-    io.to(chatId).emit("receiveMessage", {
-      senderId,
-      content: encryptedContent,
+  socket.on("new message", (newMessageRecieved) => {
+    var chat = newMessageRecieved.chat;
+
+    if (!chat.users) return console.log("chat.users not defined");
+
+    chat.users.forEach((user) => {
+      if (user._id == newMessageRecieved.sender._id) return;
+
+      socket.in(user._id).emit("message recieved", newMessageRecieved);
     });
   });
 
-  // Handle user disconnection
-  socket.on("disconnect", () => {
-    console.log("A user disconnected");
+  socket.off("setup", () => {
+    console.log("USER DISCONNECTED");
+    socket.leave(userData._id);
   });
-});
-
-// API Routes
-app.use("/api", authRoutes);
-app.use("/api", userCRUDs);
-app.use("/api", chatRoutes); // Mount chat routes under '/api/chats'
-
-// Start the server
-server.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
 });
